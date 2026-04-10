@@ -1,0 +1,38 @@
+{
+  "name": "recall-ai-temp",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "@daily-co/daily-js": "^0.89.1",
+    "@deepgram/sdk": "^5.0.0",
+    "@google/generative-ai": "^0.24.1",
+    "axios": "^1.14.0",
+    "cartesia": "^1.0.0",
+    "deepgram": "^1.0.3",
+    "firebase": "^12.11.0",
+    "firebase-admin": "^13.7.0",
+    "lamejs": "^1.2.1",
+    "next": "16.2.1",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "babel-plugin-react-compiler": "1.0.0",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.1",
+    "eslint-plugin-check-file": "^3.3.1",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}

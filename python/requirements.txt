@@ -1,0 +1,28 @@
+fastapi
+uvicorn[standard]
+pydantic
+python-multipart
+websockets
+httpx
+aiofiles
+python-dotenv
+loguru
+
+# Pipecat and related
+pipecat-ai[all]
+google-generativeai
+cartesia
+deepgram-sdk
+
+# Firebase for state management
+firebase-admin
+
+# Additional utilities
+pydub
+numpy
+
+# LangGraph state machine
+langgraph
+langchain-core
+langchain-openai
+langchain-google-genai
