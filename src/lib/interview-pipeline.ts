@@ -21,7 +21,7 @@ export class InterviewPipeline {
     this.interviewLogic = new InterviewLogic(interviewState);
 
     // Initialize clients
-    this.deepgram = new DeepgramClient(process.env.DEEPGRAM_API_KEY!);
+    this.deepgram = new (DeepgramClient as any)(process.env.DEEPGRAM_API_KEY!);
     // this.cartesia = new CartesiaClient({ apiKey: process.env.CARTESIA_API_KEY! });
     this.gemini = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
   }
