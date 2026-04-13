@@ -11,7 +11,6 @@ import {
 import { withErrorHandler } from "@/lib/error-handler";
 import { loggingMiddleware } from "@/lib/logging";
 import { rateLimitMiddleware } from "@/lib/rate-limit";
-import { getEnv } from "@/lib/env";
 
 const createBotSchema = z.object({
   meetingUrl: z.string().url("Invalid meeting URL"),
