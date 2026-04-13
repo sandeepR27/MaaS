@@ -20,5 +20,6 @@ COPY . .
 # Create logs directory
 RUN mkdir -p logs
 
-# Run the application using the explicit shell to ensure $PORT is expanded
-CMD ["/bin/sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+# Start the app using python directly. 
+# Our main.py will handle reading the $PORT variable.
+CMD ["python", "main.py"]
