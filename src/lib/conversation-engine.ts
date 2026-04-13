@@ -41,14 +41,15 @@ export async function startInterview(interviewId: string): Promise<void> {
   if (!state) throw new Error(`No active state for interview ${interviewId}`);
 
   const stageConfig = getStageConfig(state.currentStage);
-  const firstQuestion = stageConfig.questions[0];
+  const iv = getInterview(interviewId);
+  const stage = iv?.stages.find((s) => s.stageName === state.currentStage);
+  const questions = stage && stage.questions.length > 0 ? stage.questions : stageConfig.questions;
+  const firstQuestion = questions[0];
   state.currentQuestion = firstQuestion;
   state.currentQuestionIndex = 0;
 
   // Update stage status
-  const iv = getInterview(interviewId);
   if (iv) {
-    const stage = iv.stages.find((s) => s.stageName === state.currentStage);
     if (stage) stage.status = "active";
     iv.status = "active";
     iv.currentStage = state.currentStage;
@@ -137,7 +138,10 @@ export async function processTranscript(
     publishInterviewLiveState(interviewId);
 
     // Get stage config for current stage
+    const iv = getInterview(interviewId);
+    const stage = iv?.stages.find((s) => s.stageName === state.currentStage);
     const stageConfig = getStageConfig(state.currentStage);
+    const questions = stage && stage.questions.length > 0 ? stage.questions : stageConfig.questions;
 
     console.log(`[Engine] Calling Gemini for evaluation (Stage: ${state.currentStage}, QIdx: ${state.currentQuestionIndex})...`);
     // Call Gemini to evaluate and get next question
@@ -147,7 +151,7 @@ export async function processTranscript(
       currentQuestion: state.currentQuestion,
       candidateAnswer: candidateText,
       conversationHistory: state.conversationHistory,
-      stageQuestions: stageConfig.questions,
+      stageQuestions: questions,
     });
 
     console.log(`[Engine] Gemini response for ${interviewId}:`, JSON.stringify(evaluation, null, 2));
@@ -224,7 +228,9 @@ async function advanceStage(
     state.scores = [];
 
     const nextStageConfig = getStageConfig(nextStage);
-    const firstQuestion = nextStageConfig.questions[0];
+    const nStage = iv?.stages.find((s) => s.stageName === nextStage);
+    const nextQuestions = nStage && nStage.questions.length > 0 ? nStage.questions : nextStageConfig.questions;
+    const firstQuestion = nextQuestions[0];
     state.currentQuestion = firstQuestion;
     publishInterviewLiveState(interviewId);
 

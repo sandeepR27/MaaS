@@ -105,12 +105,10 @@ async function handleEventAsync(
             const currentState = getInterviewState(interviewId);
             if (
               currentState &&
-              currentState.accumulatedTranscript.trim().length > 3 &&
-              !currentState.isProcessing &&
-              !currentState.isBotSpeaking
+              currentState.accumulatedTranscript.trim().length > 3
             ) {
-              console.log(`[Webhook] Silence fallback triggered for ${interviewId} after 3s of inactivity`);
-              await processTranscript(interviewId);
+              console.log(`[Webhook] Letting Python backend handle transcript...`);
+              // We just let the UI see the transcript entries added above
             }
           } catch (e) {
             console.error("Silence fallback error:", e);
@@ -148,8 +146,8 @@ async function handleEventAsync(
       // Small delay to let final transcript arrive
       setTimeout(async () => {
         try {
-          console.log(`[Webhook] Executing deferred processTranscript for ${interviewId}`);
-          await processTranscript(interviewId);
+          console.log(`[Webhook] Executing deferred python sync for ${interviewId}`);
+          // no-op: python handles audio
         } catch (e) {
           console.error("Error processing transcript after speech_off:", e);
         }
@@ -184,19 +182,17 @@ async function handleEventAsync(
       );
 
       if (state && state.conversationHistory.length === 0) {
-        console.log("Scheduling startInterview in 3s for", interviewId);
-        // Delay start slightly to ensure bot is fully in call
+        console.log("Scheduling python bridge activation in 3s for", interviewId);
+        // Delay logically to reflect in UI
         setTimeout(async () => {
           try {
             const currentState = getInterviewState(interviewId);
             if (currentState && currentState.conversationHistory.length === 0) {
-              console.log("Calling startInterview for", interviewId);
-              await startInterview(interviewId);
-            } else {
-              console.log("Skipping startInterview: already started.");
+              console.log("Letting python backend start interview for", interviewId);
+              currentState.isBotSpeaking = true;
             }
           } catch (e) {
-            console.error("Error starting interview:", e);
+            console.error("Error updating interview state:", e);
           }
         }, 3000);
       } else {

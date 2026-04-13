@@ -16,8 +16,17 @@ SILENT_MP3_B64 = (
 )
 
 def get_recall_client() -> httpx.AsyncClient:
+    region = settings.recall_region or "us-east-1"
+    # Construct base URL based on region
+    if region == "us-east-1":
+        base_url = "https://api.recall.ai/api/v1"
+    else:
+        base_url = f"https://{region}.recall.ai/api/v1"
+        
+    logger.info(f"Using Recall region: {region} (URL: {base_url})")
+
     return httpx.AsyncClient(
-        base_url="https://api.recall.ai/api/v1",
+        base_url=base_url,
         headers={
             "Authorization": f"Token {settings.recall_api_key}",
             "Content-Type": "application/json",
@@ -26,11 +35,12 @@ def get_recall_client() -> httpx.AsyncClient:
         timeout=30.0,
     )
 
-async def create_bot(meeting_url: str, webhook_url: str, bot_name: str = "AI Interviewer") -> dict:
+async def create_bot(meeting_url: str, webhook_url: str, ws_url: str = None, bot_name: str = "AI Interviewer") -> dict:
     payload = {
         "meeting_url": meeting_url,
         "bot_name": bot_name,
         "recording_config": {
+            "audio_mixed_raw": {},
             "transcript": {
                 "provider": {
                     "recallai_streaming": {
@@ -48,13 +58,17 @@ async def create_bot(meeting_url: str, webhook_url: str, bot_name: str = "AI Int
                     "url": webhook_url,
                     "events": [
                         "transcript.data",
+                        "recording.status_change",
                         "participant_events.speech_on",
-                        "participant_events.speech_off",
                         "participant_events.join",
                         "participant_events.leave",
                     ],
                 },
-            ],
+            ] + ([{
+                "type": "websocket",
+                "url": ws_url,
+                "events": ["audio_mixed_raw.data"]
+            }] if ws_url else []),
         },
         "automatic_audio_output": {
             "in_call_recording": {
@@ -96,12 +110,7 @@ async def create_bot(meeting_url: str, webhook_url: str, bot_name: str = "AI Int
 
 
 async def send_audio(bot_id: str, audio_data_b64: str) -> bool:
-    """Send MP3 audio to a Recall bot to be played in the call.
-
-    Recall API reference:
-      POST /api/v1/bot/{id}/send_audio/
-      Body: { "data": { "kind": "mp3", "b64_data": "<base64>" } }
-    """
+    """Send MP3 audio to a Recall bot to be played in the call."""
     payload = {
         "data": {
             "kind": "mp3",
@@ -114,12 +123,22 @@ async def send_audio(bot_id: str, audio_data_b64: str) -> bool:
             response = await client.post(f"/bot/{bot_id}/send_audio/", json=payload)
             response.raise_for_status()
             return True
-        except httpx.HTTPStatusError as e:
-            logger.error(
-                f"Recall send_audio HTTP error for bot {bot_id}: "
-                f"{e.response.status_code} — {e.response.text}"
-            )
-            return False
         except Exception as e:
-            logger.error(f"Recall send_audio error for bot {bot_id}: {e}")
+            logger.error(f"Recall send_audio error: {e}")
+            return False
+
+async def stop_audio(bot_id: str) -> bool:
+    """Stop the current audio output for the bot by deleting pending output."""
+    async with get_recall_client() as client:
+        try:
+            # First try the standard Recall interruption endpoint
+            response = await client.delete(f"/bot/{bot_id}/output_audio/")
+            if response.status_code == 204:
+                return True
+            
+            # Fallback for older bot versions
+            await client.delete(f"/bot/{bot_id}/send_audio/")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to stop bot audio: {e}")
             return False

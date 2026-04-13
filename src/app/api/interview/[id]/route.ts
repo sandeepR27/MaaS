@@ -5,6 +5,8 @@ import { withErrorHandler } from "@/lib/error-handler";
 import { loggingMiddleware } from "@/lib/logging";
 import { rateLimitMiddleware } from "@/lib/rate-limit";
 
+export const dynamic = "force-dynamic";
+
 export const GET = withErrorHandler(
   rateLimitMiddleware(
     loggingMiddleware(async (

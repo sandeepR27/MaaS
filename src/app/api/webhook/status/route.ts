@@ -50,14 +50,8 @@ export const POST = withErrorHandler(
         if (isInCall) {
           const state = getInterviewState(interview.id);
           if (state && state.conversationHistory.length === 0) {
-            console.log(`Bot is in-call for ${interview.id} — starting interview in 3s`);
-            setTimeout(async () => {
-              try {
-                await startInterview(interview.id);
-              } catch (e) {
-                console.error("Error starting interview from status webhook:", e);
-              }
-            }, 3000);
+            console.log(`Bot is in-call for ${interview.id} — letting Python Backend handle Real-Time Gemini Live Audio`);
+            state.isBotSpeaking = true; // Let the UI know it's active
           }
         }
 

@@ -31,6 +31,7 @@ const envSchema = z.object({
   DEEPGRAM_API_KEY: z.string().optional(),
   DAILY_API_KEY: z.string().optional(),
   NEXT_PUBLIC_APP_URL: z.string().url(),
+  PYTHON_API_URL: z.string().url().default("http://127.0.0.1:8000"),
 });
 
 export type Env = z.infer<typeof envSchema>;

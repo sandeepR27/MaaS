@@ -37,17 +37,14 @@ websocket_manager: Optional[WebSocketManager] = None
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager"""
-    global interview_manager, webhook_handler, websocket_manager
+    # Import the singletons
+    from interview_manager import interview_manager
+    from websocket_manager import websocket_manager
 
     # Startup
     logger.info("Starting AI Interview Orchestrator...")
 
-    # Initialize managers
-    interview_manager = InterviewManager()
-    webhook_handler = WebhookHandler(interview_manager)
-    websocket_manager = WebSocketManager(interview_manager)
-
-    # Start background tasks
+    # Start background tasks on the singletons
     await interview_manager.start()
     await websocket_manager.start()
 

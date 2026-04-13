@@ -66,10 +66,10 @@ export function genId(): string {
   return `iv_${Date.now()}_${++idCounter}`;
 }
 
-export function createInterview(data: Omit<Interview, "id" | "responses" | "transcriptEntries" | "report" | "createdAt">): Interview {
+export function createInterview(data: Omit<Interview, "id" | "responses" | "transcriptEntries" | "report" | "createdAt">, id?: string): Interview {
   const interview: Interview = {
     ...data,
-    id: genId(),
+    id: id || genId(),
     responses: [],
     transcriptEntries: [],
     report: null,
@@ -81,6 +81,10 @@ export function createInterview(data: Omit<Interview, "id" | "responses" | "tran
 
 export function getInterview(id: string): Interview | undefined {
   return interviews.get(id);
+}
+
+export function deleteInterview(id: string): void {
+  interviews.delete(id);
 }
 
 export function getInterviewByBotId(botId: string): Interview | undefined {

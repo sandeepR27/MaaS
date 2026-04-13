@@ -191,3 +191,61 @@ Recommendation must be one of: strong_hire, hire, maybe, no_hire, strong_no_hire
 
   return JSON.parse(text) as ReportResult;
 }
+
+export async function generateDynamicStages(
+  resumeText: string,
+  stageNames: string[]
+): Promise<Array<{ stageName: string; questions: string[] }>> {
+  const env = getEnv();
+  const apiKey = env.GROQ_API_KEY;
+  if (!apiKey) throw new Error("GROQ_API_KEY is missing from environment");
+
+  const prompt = `You are an expert technical recruiter and interviewer.
+Based on the following candidate resume, please generate customized, dynamic interview questions for each of the requested interview stages.
+Make the questions extremely relevant to their experience, deep, and probing.
+
+CANDIDATE RESUME:
+${resumeText}
+
+REQUESTED STAGES: ${stageNames.join(", ")}
+
+Generate EXACTLY 5 questions per stage. Make sure checking the resume for specifics.
+Respond with ONLY valid JSON in this exact format:
+{
+  "stages": [
+    {
+      "stageName": "screening",
+      "questions": [
+        "Can you explain your experience with [specific tech from resume]?",
+        "..."
+      ]
+    }
+  ]
+}
+Ensure the JSON response contains a 'stages' array with 'stageName' matching precisely the requested stages.`;
+
+  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${apiKey}`
+    },
+    body: JSON.stringify({
+      model: "llama-3.3-70b-versatile",
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.6,
+      response_format: { type: "json_object" }
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`Groq API error: ${response.status}`);
+  }
+
+  const data = await response.json();
+  let text = data.choices[0].message.content;
+  text = text.replace(/```json/g, "").replace(/```/g, "").trim();
+
+  const parsed = JSON.parse(text);
+  return parsed.stages || [];
+}

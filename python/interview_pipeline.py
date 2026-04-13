@@ -15,13 +15,19 @@ import io
 import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional
+import json
+import base64
+import io
 
+from fastapi import WebSocket, WebSocketDisconnect
 from loguru import logger
 from pydub import AudioSegment
+from google import genai
+from google.genai import types
 
 from config import settings
 from models import InterviewState, TranscriptEntry
-from services.recall_api import send_audio
+from services.recall_api import send_audio, stop_audio
 
 
 # ---------------------------------------------------------------------------
@@ -168,6 +174,7 @@ class InterviewPipeline:
         self.interview_id = interview_id
         self.interview_state = interview_state
         self.is_running = False
+        self._gemini_session = None
 
         # Lazy import to avoid circular deps
         from agent_factory import create_specialized_agent
@@ -178,10 +185,10 @@ class InterviewPipeline:
     # ------------------------------------------------------------------
 
     async def start(self):
-        """Mark the pipeline active and kick off the opening greeting."""
+        """Mark the pipeline active."""
         logger.info(f"[{self.interview_id}] Interview pipeline starting.")
         self.is_running = True
-        asyncio.create_task(self._send_opening_greeting())
+        # Intro is now triggered inside handle_recall_audio_websocket once bridge is up
 
     async def stop(self):
         """Shut down the pipeline."""
@@ -202,15 +209,161 @@ class InterviewPipeline:
             "Could you please start by introducing yourself and telling me about your background?"
         )
         logger.info(f"[{self.interview_id}] Sending opening greeting.")
-        await self._speak(greeting)
+        
+        # We wait for Gemini Live to be ready. 
+        # If it doesn't connect in 10 seconds, we fallback to offline TTS.
+        retries = 0
+        while not self._gemini_session and retries < 10:
+            await asyncio.sleep(1)
+            retries += 1
+
+        if self._gemini_session:
+            logger.info(f"[{self.interview_id}] Sending intro turn via Gemini Live")
+            await self._gemini_session.send({"client_content": {"turns": [{"role": "user", "parts": [{"text": greeting}]}], "turn_complete": True}})
+        else:
+            logger.warning(f"[{self.interview_id}] Gemini Live not connected, falling back to offline TTS for intro")
+            await self._speak(greeting)
 
     # ------------------------------------------------------------------
-    # Transcript processing  (called from webhook_handler)
+    # Gemini Multimodal Live Bridge (Real-Time Audio)
+    # ------------------------------------------------------------------
+
+    async def handle_recall_audio_websocket(self, websocket: WebSocket):
+        """Establish direct bridge between Recall Audio WS and Gemini Multimodal Live"""
+        logger.info(f"[{self.interview_id}] Initializing Gemini Live Realtime Audio Bridge")
+        
+        client = genai.Client(api_key=settings.gemini_api_key, http_options={'api_version': 'v1alpha'})
+        
+        system_prompt = getattr(self.agent, "system_prompt", "You are an AI interviewer.")
+        system_prompt += (
+            "\n\nIMPORTANT IDENTITY RULES:"
+            "\n1. You are a SINGLE person. Never use multiple voices or simulate multiple people."
+            "\n2. Use a professional, calm, and natural tone."
+            "\n3. Keep your questions concise (1-2 sentences)."
+        )
+        resume_attr = getattr(self.interview_state, "resume_text", "")
+        if resume_attr and len(resume_attr) > 10:
+            system_prompt += f"\n\nYou must strictly tailor your interview questions and dialogue to adapt to this candidate's resume:\n{resume_attr}"
+
+        config = types.LiveConnectConfig(
+            response_modalities=[types.LiveResponseModality.AUDIO],
+            speech_config=types.LiveSpeechConfig(
+                voice_config=types.VoiceConfig(
+                    prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                        voice_name="Aoede"  # Aoede is natural female, Charon is male. 
+                    )
+                )
+            ),
+            system_instruction=types.Content(parts=[types.Part.from_text(text=system_prompt)])
+        )
+
+        try:
+            async with client.aio.live.connect("models/gemini-2.0-flash-exp", config=config) as session:
+                self._gemini_session = session
+                logger.info(f"[{self.interview_id}] Connected to Gemini Live!")
+
+                # Send opening greeting immediately via Gemini Live Turn
+                candidate = self.interview_state.candidate_name
+                greeting = (
+                    f"Hello {candidate}, welcome to your interview! "
+                    "I'm your AI interviewer today. "
+                    "Could you please start by introducing yourself and telling me about your background?"
+                )
+                logger.info(f"[{self.interview_id}] Sending intro turn via Gemini Live bridge")
+                await session.send({"client_content": {"turns": [{"role": "user", "parts": [{"text": greeting}]}], "turn_complete": True}})
+
+                async def receive_from_recall():
+                    try:
+                        while self.is_running:
+                            msg = await websocket.receive_text()
+                            data = json.loads(msg)
+                            if data.get("event") == "audio_mixed_raw.data":
+                                b64_aud = data.get("data", {}).get("b64_data")
+                                if b64_aud:
+                                    # Forward PCM into Gemini
+                                    pcm_bytes = base64.b64decode(b64_aud)
+                                    await session.send({
+                                        "realtime_input": {
+                                            "media_chunks": [{
+                                                "mime_type": "audio/pcm;rate=16000",
+                                                "data": pcm_bytes
+                                            }]
+                                        }
+                                    })
+                    except WebSocketDisconnect:
+                        logger.info(f"[{self.interview_id}] Recall WS Disconnected")
+                    except Exception as e:
+                        logger.error(f"[{self.interview_id}] Error reading from Recall WS: {e}")
+
+                async def receive_from_gemini():
+                    try:
+                        pcm_buffer = bytearray()
+                        async for response in session.receive():
+                            server_content = response.server_content
+                            if server_content is not None:
+                                model_turn = server_content.model_turn
+                                if model_turn:
+                                    for part in model_turn.parts:
+                                        if part.inline_data:
+                                            # Keep buffering the 24kHz PCM from Gemini
+                                            pcm_buffer.extend(part.inline_data.data)
+                                            
+                                # When Gemini states the turn is finished, we encode and push to Recall
+                                if server_content.turn_complete:
+                                    if pcm_buffer:
+                                        await self._flush_audio_to_recall(bytes(pcm_buffer))
+                                        pcm_buffer.clear()
+
+                                # Handle Interruption: If Gemini detects user is speaking, stop the current bot audio
+                                if server_content.interrupted:
+                                    logger.info(f"[{self.interview_id}] Gemini detected interruption — stopping bot audio")
+                                    pcm_buffer.clear()
+                                    if self.interview_state.bot_id:
+                                        await stop_audio(self.interview_state.bot_id)
+
+                    except Exception as e:
+                        logger.error(f"[{self.interview_id}] Error receiving from Gemini Live: {e}")
+
+                await asyncio.gather(receive_from_recall(), receive_from_gemini())
+
+        except Exception as e:
+            logger.error(f"[{self.interview_id}] Failed to start Gemini Live Bridge: {e}")
+        finally:
+            self._gemini_session = None
+
+    async def _flush_audio_to_recall(self, pcm_data: bytes):
+        """Convert Gemini 24kHz PCM back into MP3 and push to Recall send_audio"""
+        bot_id = self.interview_state.bot_id
+        if not bot_id:
+            return
+
+        try:
+            segment = AudioSegment(
+                data=pcm_data,
+                sample_width=2,
+                frame_rate=24000,
+                channels=1,
+            )
+            mp3_buffer = io.BytesIO()
+            segment.export(mp3_buffer, format="mp3")
+            b64_mp3 = base64.b64encode(mp3_buffer.getvalue()).decode("utf-8")
+            
+            logger.info(f"[{self.interview_id}] → Sending Voice Response to Meeting ({len(b64_mp3)} bytes)")
+            await send_audio(bot_id, b64_mp3)
+        except Exception as e:
+            logger.error(f"[{self.interview_id}] Audio conversion error: {e}")
+
+    # ------------------------------------------------------------------
+    # Webhook Transcript processing (Legacy Fallback)
     # ------------------------------------------------------------------
 
     async def process_transcript(self, transcript_data: Dict[str, Any]):
         """Handle a transcript.data webhook payload from Recall AI."""
         if not self.is_running:
+            return
+
+        if self._gemini_session:
+            # Ignore text transcripts if the Real-Time Audio stream is active
             return
 
         try:
@@ -278,8 +431,8 @@ class InterviewPipeline:
 
     async def _speak(self, text: str):
         """Convert text to audio via Pipecat TTS and send to the Recall bot."""
-        if not self.is_running:
-            logger.warning(f"[{self.interview_id}] Pipeline not running, skipping speech.")
+        if not self.is_running or self._gemini_session:
+            logger.warning(f"[{self.interview_id}] Pipeline not running or Gemini Live active, skipping offline speech.")
             return
 
         bot_id = self.interview_state.bot_id

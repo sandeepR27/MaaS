@@ -33,6 +33,7 @@ class InterviewState(BaseModel):
     current_stage: str = "introduction"
     current_question_index: int = 0
     conversation_history: List[Dict[str, str]] = Field(default_factory=list)
+    resume_text: str = ""
     scores: Dict[str, int] = Field(default_factory=dict)
     feedback: Dict[str, str] = Field(default_factory=dict)
     created_at: datetime

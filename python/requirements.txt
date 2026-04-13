@@ -11,6 +11,7 @@ loguru
 # Pipecat and related
 pipecat-ai[all]
 google-generativeai
+google-genai
 cartesia
 deepgram-sdk
 

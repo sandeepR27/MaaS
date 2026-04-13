@@ -31,6 +31,7 @@ export default function DashboardPage() {
   const [interviews, setInterviews] = useState<Interview[]>([]);
   const [meetingUrl, setMeetingUrl] = useState("");
   const [candidateName, setCandidateName] = useState("");
+  const [resumeText, setResumeText] = useState("");
   const [selectedStages, setSelectedStages] = useState<string[]>([
     "screening",
     "technical",
@@ -70,6 +71,7 @@ export default function DashboardPage() {
           meetingUrl,
           candidateName,
           stages: selectedStages,
+          resumeText,
         }),
       });
 
@@ -81,6 +83,7 @@ export default function DashboardPage() {
 
       setMeetingUrl("");
       setCandidateName("");
+      setResumeText("");
       fetchInterviews();
     } catch {
       setError("Network error. Please try again.");
@@ -155,6 +158,18 @@ export default function DashboardPage() {
                   required
                 />
               </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Candidate Resume (Optional - Enables Dynamic AI Questions)
+              </label>
+              <textarea
+                value={resumeText}
+                onChange={(e) => setResumeText(e.target.value)}
+                placeholder="Paste candidate's resume here to dynamically generate tailored interview questions..."
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent min-h-[120px]"
+              />
             </div>
 
             <div>
