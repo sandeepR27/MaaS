@@ -31,7 +31,7 @@ export class InterviewPipeline {
       console.log(`Starting interview pipeline for ${this.interviewId}`);
 
       // Create Daily call
-      this.call = Daily.create({
+      this.call = (Daily as any).create({
         url: this.interviewState.meetingUrl,
         token: null, // Will be set when bot joins
       });
