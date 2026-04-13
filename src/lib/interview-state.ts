@@ -6,6 +6,7 @@
 export interface ConversationEntry {
   role: string; // "interviewer" | "candidate"
   text: string;
+  timestamp?: number;
 }
 
 export interface TranscriptEntry {
