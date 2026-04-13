@@ -1,5 +1,5 @@
 import Daily from '@daily-co/daily-js';
-import { Deepgram } from '@deepgram/sdk';
+// Removed Deepgram import due to type collision in v5 SDK
 // import { CartesiaClient } from 'cartesia'; // Placeholder
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { InterviewState } from './interview-state';
@@ -10,7 +10,7 @@ export class InterviewPipeline {
   private interviewState: InterviewState;
   private interviewLogic: InterviewLogic;
   private call: any = null; // Daily instance
-  private deepgram: Deepgram;
+  private deepgram: any;
   // private cartesia: CartesiaClient;
   private gemini: GoogleGenerativeAI;
   private isRunning = false;
