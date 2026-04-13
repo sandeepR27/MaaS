@@ -1,5 +1,5 @@
 import Daily from '@daily-co/daily-js';
-import { createClient } from '@deepgram/sdk';
+import { DeepgramClient } from '@deepgram/sdk';
 // import { CartesiaClient } from 'cartesia'; // Placeholder
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { InterviewState } from './interview-state';
@@ -21,7 +21,7 @@ export class InterviewPipeline {
     this.interviewLogic = new InterviewLogic(interviewState);
 
     // Initialize clients
-    this.deepgram = createClient(process.env.DEEPGRAM_API_KEY!);
+    this.deepgram = new DeepgramClient(process.env.DEEPGRAM_API_KEY!);
     // this.cartesia = new CartesiaClient({ apiKey: process.env.CARTESIA_API_KEY! });
     this.gemini = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
   }
